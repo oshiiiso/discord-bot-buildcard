@@ -1,0 +1,120 @@
+"""紹介キャラを選ぶ View。自分にだけ見える。"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+import discord
+
+import messages as msg
+from config import VIEW_TIMEOUT_SECONDS
+from services.copy import t
+from services.session_store import UidSession
+
+if TYPE_CHECKING:
+    from cogs.build import BuildCog
+
+PAGE_SIZE = 25
+
+
+class UidPickView(discord.ui.View):
+    """紹介キャラ選択とビルド選択。チャンネルには出さない。"""
+
+    def __init__(self, cog: BuildCog, session_key: int) -> None:
+        super().__init__(timeout=VIEW_TIMEOUT_SECONDS)
+        self.cog = cog
+        self.session_key = session_key
+        self.rebuild()
+
+    def session(self) -> UidSession | None:
+        return self.cog.sessions.get(self.session_key)
+
+    def rebuild(self) -> None:
+        self.clear_items()
+        session = self.session()
+        if session is None:
+            return
+        options = [
+            discord.SelectOption(
+                label=a.name_ja[:100],
+                value=str(i),
+                description=f"Lv.{a.level} C{a.constellations}"[:100],
+            )
+            for i, a in enumerate(session.avatars[:PAGE_SIZE])
+        ]
+        if options:
+            self.add_item(_AvatarSelect(self, options, t(msg.MSG_20)))
+        avatar = session.selected_avatar()
+        if avatar and len(avatar.character.builds) > 1:
+            build_opts = [
+                discord.SelectOption(label=b.name_ja, value=b.id)
+                for b in avatar.character.builds
+            ]
+            self.add_item(_UidBuildSelect(self, build_opts, t(msg.MSG_19)))
+        self.add_item(_RefreshButton(self))
+
+    async def on_timeout(self) -> None:
+        self.cog.sessions.drop(self.session_key)
+
+    async def _ensure_owner(self, interaction: discord.Interaction) -> bool:
+        session = self.session()
+        if session is None:
+            await interaction.response.send_message(t(msg.ERR_03), ephemeral=True)
+            return False
+        if interaction.user.id != session.user_id:
+            await interaction.response.send_message(t(msg.ERR_01), ephemeral=True)
+            return False
+        return True
+
+
+class _AvatarSelect(discord.ui.Select):
+    def __init__(self, parent: UidPickView, options: list[discord.SelectOption], placeholder: str) -> None:
+        super().__init__(placeholder=placeholder, options=options, min_values=1, max_values=1)
+        self.parent_view = parent
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not await self.parent_view._ensure_owner(interaction):
+            return
+        session = self.parent_view.session()
+        if session is None:
+            return
+        session.selected_index = int(self.values[0])
+        avatar = session.selected_avatar()
+        if avatar is None:
+            await interaction.response.send_message(t(msg.ERR_03), ephemeral=True)
+            return
+        session.build_id = avatar.character.builds[0].id if avatar.character.builds else None
+        if len(avatar.character.builds) > 1:
+            self.parent_view.rebuild()
+            await interaction.response.edit_message(
+                content=t(msg.MSG_32, nickname=session.nickname, character=avatar.name_ja),
+                view=self.parent_view,
+            )
+            return
+        await self.parent_view.cog.publish_card(interaction, self.parent_view)
+
+
+class _UidBuildSelect(discord.ui.Select):
+    def __init__(self, parent: UidPickView, options: list[discord.SelectOption], placeholder: str) -> None:
+        super().__init__(placeholder=placeholder, options=options, min_values=1, max_values=1)
+        self.parent_view = parent
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not await self.parent_view._ensure_owner(interaction):
+            return
+        session = self.parent_view.session()
+        if session is None:
+            return
+        session.build_id = self.values[0]
+        await self.parent_view.cog.publish_card(interaction, self.parent_view)
+
+
+class _RefreshButton(discord.ui.Button):
+    def __init__(self, parent: UidPickView) -> None:
+        super().__init__(label=t(msg.MSG_55), style=discord.ButtonStyle.secondary)
+        self.parent_view = parent
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not await self.parent_view._ensure_owner(interaction):
+            return
+        await self.parent_view.cog.refresh_uid_session(interaction, self.parent_view)

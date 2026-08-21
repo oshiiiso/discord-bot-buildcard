@@ -1,0 +1,70 @@
+"""カード開始ボタンと UID 入力 Modal。再起動後も同じ custom_id で動く。"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, cast
+
+import discord
+
+import messages as msg
+from config import START_BUTTON_CUSTOM_ID
+from services.copy import t
+
+if TYPE_CHECKING:
+    from cogs.build import BuildCog
+
+
+class StartCardView(discord.ui.View):
+    """案内ピンと、カードの下に出す開始ボタン。"""
+
+    def __init__(self) -> None:
+        super().__init__(timeout=None)
+        self.add_item(_StartButton())
+
+
+class _StartButton(discord.ui.Button):
+    def __init__(self) -> None:
+        super().__init__(
+            label=t(msg.MSG_01),
+            style=discord.ButtonStyle.primary,
+            custom_id=START_BUTTON_CUSTOM_ID,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        cog = _build_cog(interaction)
+        if cog is None:
+            await interaction.response.send_message(t(msg.ERR_12), ephemeral=True)
+            return
+        if not cog.in_bot_channel(interaction.channel):
+            await interaction.response.send_message(t(msg.ERR_02), ephemeral=True)
+            return
+        await interaction.response.send_modal(UidModal())
+
+
+class UidModal(discord.ui.Modal):
+    """UID 入力。"""
+
+    def __init__(self) -> None:
+        super().__init__(title=t(msg.MSG_24)[:45])
+        self.uid_input = discord.ui.TextInput(
+            label=t(msg.MSG_25)[:45],
+            placeholder=t(msg.MSG_26),
+            min_length=8,
+            max_length=20,
+            required=True,
+        )
+        self.add_item(self.uid_input)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        cog = _build_cog(interaction)
+        if cog is None:
+            await interaction.response.send_message(t(msg.ERR_12), ephemeral=True)
+            return
+        await cog.begin_uid(interaction, str(self.uid_input.value))
+
+
+def _build_cog(interaction: discord.Interaction) -> BuildCog | None:
+    cog = interaction.client.get_cog("BuildCog")
+    if cog is None:
+        return None
+    return cast("BuildCog", cog)
