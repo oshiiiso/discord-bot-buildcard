@@ -20,7 +20,7 @@ from services.copy import t
 from services.enka_client import EnkaClient, EnkaError, EnkaShowcase
 from services.session_store import SessionStore, UidSession
 from ui.guide_embed import formula_embed, guide_embed, is_guide_message
-from ui.start_view import StartCardView
+from ui.start_view import CardMessageView, StartCardView
 from ui.uid_view import UidPickView
 
 logger = get_logger(__name__)
@@ -291,16 +291,6 @@ class BuildCog(commands.Cog):
         )
         message = await interaction.original_response()
         self.sessions.put(message.id, session)
-
-        if len(session.avatars) == 1:
-            avatar = session.avatars[0]
-            session.selected_index = 0
-            builds = avatar.character.builds
-            if len(builds) <= 1:
-                session.build_id = builds[0].id if builds else None
-                await self._finish_public_card(interaction, session, session_key=message.id)
-                return
-
         view = UidPickView(self, message.id)
         await interaction.edit_original_response(
             content=t(msg.MSG_31, nickname=showcase.nickname, uid=showcase.uid),
@@ -395,9 +385,10 @@ class BuildCog(commands.Cog):
         file = discord.File(fp=BytesIO(png), filename="build.png")
         try:
             await channel.send(
-                content=f"{t(msg.MSG_33, nickname=session.nickname, character=avatar.name_ja)}\n{t(msg.MSG_02)}",
                 file=file,
-                view=StartCardView(),
+                view=CardMessageView(
+                    t(msg.MSG_33, nickname=session.nickname, character=avatar.name_ja)
+                ),
             )
         except discord.HTTPException:
             logger.warning("カードの投稿に失敗しました channel=%s", channel.id)

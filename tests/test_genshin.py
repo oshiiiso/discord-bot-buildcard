@@ -53,11 +53,15 @@ def test_messages_load() -> None:
 
 def test_start_view_persistent() -> None:
     from config import START_BUTTON_CUSTOM_ID
-    from ui.start_view import StartCardView
+    from ui.start_view import CardMessageView, StartCardView
 
     view = StartCardView()
     assert view.timeout is None
     assert any(getattr(item, "custom_id", None) == START_BUTTON_CUSTOM_ID for item in view.children)
+
+    card = CardMessageView("テスト")
+    ids = [getattr(item, "custom_id", None) for item in card.walk_children()]
+    assert START_BUTTON_CUSTOM_ID in ids
 
 
 def test_latest_characters_and_sets() -> None:
@@ -210,6 +214,7 @@ def test_uid_pick_has_refresh() -> None:
     view = UidPickView(cog, 1)  # type: ignore[arg-type]
     labels = [getattr(item, "label", None) for item in view.children]
     assert t(msg.MSG_55) in labels
+    assert t(msg.MSG_74) in labels
 
 
 def test_all_characters_have_portrait_and_build() -> None:

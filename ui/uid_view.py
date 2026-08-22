@@ -34,11 +34,13 @@ class UidPickView(discord.ui.View):
         session = self.session()
         if session is None:
             return
+        selected = session.selected_index
         options = [
             discord.SelectOption(
                 label=a.name_ja[:100],
                 value=str(i),
                 description=f"Lv.{a.level} C{a.constellations}"[:100],
+                default=selected == i,
             )
             for i, a in enumerate(session.avatars[:PAGE_SIZE])
         ]
@@ -47,10 +49,15 @@ class UidPickView(discord.ui.View):
         avatar = session.selected_avatar()
         if avatar and len(avatar.character.builds) > 1:
             build_opts = [
-                discord.SelectOption(label=b.name_ja, value=b.id)
+                discord.SelectOption(
+                    label=b.name_ja,
+                    value=b.id,
+                    default=session.build_id == b.id,
+                )
                 for b in avatar.character.builds
             ]
             self.add_item(_UidBuildSelect(self, build_opts, t(msg.MSG_19)))
+        self.add_item(_PublishButton(self))
         self.add_item(_RefreshButton(self))
 
     async def on_timeout(self) -> None:
@@ -84,14 +91,12 @@ class _AvatarSelect(discord.ui.Select):
             await interaction.response.send_message(t(msg.ERR_03), ephemeral=True)
             return
         session.build_id = avatar.character.builds[0].id if avatar.character.builds else None
+        self.parent_view.rebuild()
         if len(avatar.character.builds) > 1:
-            self.parent_view.rebuild()
-            await interaction.response.edit_message(
-                content=t(msg.MSG_32, nickname=session.nickname, character=avatar.name_ja),
-                view=self.parent_view,
-            )
-            return
-        await self.parent_view.cog.publish_card(interaction, self.parent_view)
+            content = t(msg.MSG_76, nickname=session.nickname, character=avatar.name_ja)
+        else:
+            content = t(msg.MSG_32, nickname=session.nickname, character=avatar.name_ja)
+        await interaction.response.edit_message(content=content, view=self.parent_view)
 
 
 class _UidBuildSelect(discord.ui.Select):
@@ -106,6 +111,26 @@ class _UidBuildSelect(discord.ui.Select):
         if session is None:
             return
         session.build_id = self.values[0]
+        avatar = session.selected_avatar()
+        name = avatar.name_ja if avatar else ""
+        await interaction.response.edit_message(
+            content=t(msg.MSG_32, nickname=session.nickname, character=name),
+            view=self.parent_view,
+        )
+
+
+class _PublishButton(discord.ui.Button):
+    def __init__(self, parent: UidPickView) -> None:
+        super().__init__(label=t(msg.MSG_74), style=discord.ButtonStyle.primary)
+        self.parent_view = parent
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not await self.parent_view._ensure_owner(interaction):
+            return
+        session = self.parent_view.session()
+        if session is None or session.selected_avatar() is None:
+            await interaction.response.send_message(t(msg.MSG_75), ephemeral=True)
+            return
         await self.parent_view.cog.publish_card(interaction, self.parent_view)
 
 
