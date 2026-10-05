@@ -199,6 +199,44 @@ def test_render_card_smoke() -> None:
     assert png.startswith(b"\x89PNG")
 
 
+def test_uid_pick_empty_name_keeps_select_label() -> None:
+    import discord
+
+    import messages as msg
+    from games.genshin import GenshinGame
+    from services.copy import t
+    from services.enka_client import EnkaAvatar
+    from services.session_store import SessionStore, UidSession
+    from ui.uid_view import UidPickView
+
+    class _Cog:
+        def __init__(self) -> None:
+            self.sessions = SessionStore()
+
+    game = GenshinGame()
+    character = game.fallback_character(10000999, t(msg.MSG_57), "pyro")
+    avatars = [
+        EnkaAvatar(
+            avatar_id=10000999,
+            skill_depot_id=0,
+            name_ja="",
+            icon="",
+            level=90,
+            constellations=0,
+            friendship=1,
+            character=character,
+            pieces=[],
+            weapon=None,
+        )
+        for _ in range(12)
+    ]
+    cog = _Cog()
+    cog.sessions.put(1, UidSession(user_id=1, uid="123456789", nickname="t", avatars=avatars))
+    view = UidPickView(cog, 1)  # type: ignore[arg-type]
+    select = next(child for child in view.children if isinstance(child, discord.ui.Select))
+    assert all(1 <= len(option.label) <= 100 for option in select.options)
+
+
 def test_uid_pick_has_refresh() -> None:
     import messages as msg
     from services.copy import t

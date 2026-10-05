@@ -504,6 +504,7 @@ class EnkaClient:
         else:
             name_ja = character.name_ja
             element = character.element or element
+        name_ja = (name_ja or character.name_ja or t(msg.MSG_57)).strip()
         info = self._store_info(avatar_id, skill_depot_id)
         skill_map = raw.get("skillLevelMap") or {}
         name_id = self._name_id_for_avatar(avatar_id, skill_depot_id, costume_id)

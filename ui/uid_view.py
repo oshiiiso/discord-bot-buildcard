@@ -15,6 +15,15 @@ if TYPE_CHECKING:
     from cogs.build import BuildCog
 
 PAGE_SIZE = 25
+_SELECT_LABEL_MAX = 100
+
+
+def _select_label(text: str) -> str:
+    """Discord のセレクトは label が 1〜100 文字必須。"""
+    raw = (text or "").strip()[:_SELECT_LABEL_MAX]
+    if raw:
+        return raw
+    return t(msg.MSG_57)[:_SELECT_LABEL_MAX]
 
 
 class UidPickView(discord.ui.View):
@@ -37,7 +46,7 @@ class UidPickView(discord.ui.View):
         selected = session.selected_index
         options = [
             discord.SelectOption(
-                label=a.name_ja[:100],
+                label=_select_label(a.name_ja),
                 value=str(i),
                 description=f"Lv.{a.level} C{a.constellations}"[:100],
                 default=selected == i,
@@ -50,7 +59,7 @@ class UidPickView(discord.ui.View):
         if avatar and len(avatar.character.builds) > 1:
             build_opts = [
                 discord.SelectOption(
-                    label=b.name_ja,
+                    label=_select_label(b.name_ja),
                     value=b.id,
                     default=session.build_id == b.id,
                 )
